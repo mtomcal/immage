@@ -124,6 +124,10 @@ Immage renders each selected photo with its current edits at full resolution
 in 16-bit linear ProPhoto RGB. Each photo or virtual copy gets its own editable
 pixel layer in one PhotoCraft document.
 
+The progress bar counts the rendered photos, then shows when PhotoCraft is
+preparing the layers. You can start another PhotoCraft handoff once the
+current document opens.
+
 Immage saves a ZIP-compressed layered TIFF beside the first photo when the
 estimated uncompressed layers and composite fit under 2 GiB. Larger stacks use
 PSB. If PhotoCraft cannot write the layered TIFF, Immage tries PSB.

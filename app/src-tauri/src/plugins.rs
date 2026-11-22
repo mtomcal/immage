@@ -36,6 +36,7 @@ pub struct Plugins {
     jobs_dir: PathBuf,
     // the hand-offs still waiting, by token; a cancelled one leaves
     live: Mutex<HashSet<u64>>,
+    photo_craft_handoff: tauri::async_runtime::Mutex<()>,
     // one reader or writer of the returns file at a time
     io: Mutex<()>,
     // and of the ledger
@@ -47,7 +48,8 @@ impl Plugins {
         let jobs_dir = returns_path.with_file_name("plugin-jobs");
         let config_path = returns_path.with_file_name("plugins.json");
         Plugins { returns_path, config_path, offered: Mutex::new(HashSet::new()), config_io: Mutex::new(()),
-                  jobs_dir, live: Mutex::new(HashSet::new()), io: Mutex::new(()), jobs_io: Mutex::new(()) }
+                  jobs_dir, live: Mutex::new(HashSet::new()), photo_craft_handoff: tauri::async_runtime::Mutex::new(()),
+                  io: Mutex::new(()), jobs_io: Mutex::new(()) }
     }
 
     // None when there is no file yet; a file that does not parse is as good
@@ -410,6 +412,7 @@ pub async fn plugin_photo_craft(
     if plugin.kind != "photocraft" {
         return Err("Choose PhotoCraft in Preferences".into());
     }
+    let _handoff = plugins.photo_craft_handoff.try_lock().map_err(|_| "A PhotoCraft handoff is already running")?;
     let bundle = PathBuf::from(plugin.app);
     let cli = bundle.join("Contents/MacOS/photocraft-cli");
     if !cli.is_file() {

@@ -61,7 +61,7 @@ import { VignetteOverlay } from "./VignetteOverlay";
 import { GuideOverlay } from "./GuideOverlay";
 import { autoMix } from "./bwauto";
 import { begin, end, track, useWorking } from "./activity";
-import { nextJobId, runInBackground, runMerge, runMove, useJobs } from "./background";
+import { nextJobId, runInBackground, runMerge, runMove, runRenderedEditIn, useJobs } from "./background";
 import { withModel } from "./aiModel";
 import { invert, pixelAt, setProbe, type RGB } from "./probe";
 import { anchored, neutralize, whitePatch, type WB, pickedCoefficients } from "./wb";
@@ -4047,6 +4047,7 @@ export default function App() {
   const [waiting, setWaiting] = useState<Waiting[]>([]);
   const waitingRef = useRef(waiting);
   waitingRef.current = waiting;
+  const [photoCraftBusy, setPhotoCraftBusy] = useState(false);
   const editIn = async (cfg: PluginConfig, targets: ImageEntry[]) => {
     const kind = kindOf(cfg.kind);
     if (!kind) return;
@@ -4056,16 +4057,26 @@ export default function App() {
     let send = originals;
     try {
       if (kind.handoff === "photocraft") {
-        setStatus(t("app.status.pluginPreparingLayers", { name: cfg.name }));
-        const s = session.current;
-        if (s && targets.some((photo) => photo.imgid === s.imgid)) {
-          s.flushEdits();
-          await s.settled();
+        if (photoCraftBusy) return;
+        setPhotoCraftBusy(true);
+        try {
+          const path = await runRenderedEditIn(t("app.status.pluginRendering", { name: cfg.name }), targets.length,
+            t("app.status.pluginPreparingLayers", { name: cfg.name }), async (job) => {
+              const s = session.current;
+              if (s && targets.some((photo) => photo.imgid === s.imgid)) {
+                s.flushEdits();
+                await s.settled();
+              }
+              return commands.pluginPhotoCraft(cfg.id, job, targets.map((photo) => photo.imgid));
+            }, (result) => ({
+              text: t("app.status.pluginSentItems", { items: baseName(result), name: cfg.name }),
+              ok: true,
+            }), cfg.name);
+          if (path?.endsWith(".tif") && folderRef.current && !immichRef.current && parentDir(path) === folderRef.current)
+            void showFolder(folderRef.current, true);
+        } finally {
+          setPhotoCraftBusy(false);
         }
-        const path = await track(commands.pluginPhotoCraft(cfg.id, Date.now(), targets.map((photo) => photo.imgid)));
-        if (path.endsWith(".tif") && folderRef.current && !immichRef.current && parentDir(path) === folderRef.current)
-          void showFolder(folderRef.current, true);
-        setStatus(t("app.status.pluginSentItems", { items: baseName(path), name: cfg.name }));
         return;
       }
       // TIFFs with the edit, beside each photo as Lightroom's "-Edit" files;
@@ -7613,7 +7624,11 @@ export default function App() {
                   parentFolder={immichBase && hit?.remote ? hit.remote.localPath : undefined}
                   onImportParent={importImmichParent}
                   onDelete={() => void deleteRejected(local.filter((i) => i.rejected))}
-                  editIn={hit && !isRemote(hit) ? plugins.map((cfg) => ({ cfg, why: unfit(cfg, sources) })) : null}
+                  editIn={hit && !isRemote(hit) ? plugins.map((cfg) => ({
+                    cfg,
+                    why: photoCraftBusy && kindOf(cfg.kind)?.handoff === "photocraft"
+                      ? t("app.status.pluginBusy", { name: cfg.name }) : unfit(cfg, sources),
+                  })) : null}
                   onEditIn={(cfg) => void editIn(cfg, sources)} onSetUpPlugins={() => setPrefsOpen("plugins")}
                   onClose={() => setFileMenu(null)} />
       );

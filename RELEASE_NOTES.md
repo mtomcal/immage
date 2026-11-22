@@ -11,6 +11,7 @@ Improvements
   editable 16-bit ProPhoto RGB layers with Immage edits applied. Immage
   saves a layered TIFF beside the first photo for smaller stacks and a PSB
   for larger stacks. You can continue editing the TIFF composite in Immage.
+  The handoff shows render progress and prevents duplicate jobs.
 
 ## 0.47.1
 
