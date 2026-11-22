@@ -3,6 +3,15 @@
 The section for each version is the text of its release on GitHub, and
 what Immage's update banner shows under Release Notes.
 
+## Unreleased
+
+Improvements
+
+- On macOS, Edit In opens selected photos in PhotoCraft as full-size,
+  editable 16-bit ProPhoto RGB layers with Immage edits applied. Immage
+  saves a layered TIFF beside the first photo for smaller stacks and a PSB
+  for larger stacks. You can continue editing the TIFF composite in Immage.
+
 ## 0.47.1
 
 Improvements

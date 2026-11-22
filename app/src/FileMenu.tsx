@@ -7,7 +7,7 @@ import { type PluginConfig } from "./plugins";
 import { isRemote } from "./immich";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { parentDir } from "./paths";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { t } from "./i18n";
 
 // what the system's file manager is called
@@ -78,6 +78,7 @@ export function FileMenu({ onSimilar, onKeywords, onRename, rate, captureCount, 
   onDelete: () => void; onClose: () => void;
 }) {
   const ref = useMenuClose(onClose);
+  const [editInOpen, setEditInOpen] = useState(false);
   const go = (url: string) => { onClose(); void openUrl(url); };
   // kept inside the window
   const left = Math.min(x, window.innerWidth - 230);
@@ -135,8 +136,8 @@ export function FileMenu({ onSimilar, onKeywords, onRename, rate, captureCount, 
         <div className="menu-sep" />
       </>}
       {editIn && <>
-        <div className="has-sub">
-          <button>{t("library.menu.editIn")}</button>
+        <div className={editInOpen ? "has-sub open" : "has-sub"}>
+          <button onClick={() => setEditInOpen((open) => !open)}>{t("library.menu.editIn")}</button>
           <div className="context-menu submenu">
             {editIn.map(({ cfg, why }) => (
               <button key={cfg.id} disabled={!!why} title={why ?? undefined}

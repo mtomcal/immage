@@ -79,7 +79,7 @@ export function PluginPrefs({ plugins, onPlugins }: {
                 </div>
               </PrefRow>
             )}
-            {kind.handoff !== "macrostudio" && <PrefRow id="Results folder" label={t("plugins.row.results")} summary={t("plugins.row.results.summary")}
+            {kind.handoff === "files" && <PrefRow id="Results folder" label={t("plugins.row.results")} summary={t("plugins.row.results.summary")}
                      hint={t("plugins.results.hint", { app: appName(p.app || kind.label), list: kind.returns.subfolders
                        .map((s) => (s ? t("plugins.results.sub", { name: s }) : t("plugins.results.beside"))).join(t("plugins.results.or")) })}>
               <div className="pref-inline">
@@ -96,9 +96,9 @@ export function PluginPrefs({ plugins, onPlugins }: {
                             onChange={(on) => update(p.id, { onReturn: { ...p.onReturn, [o.id]: on } })} />
               </PrefRow>
             ))}
-            <PrefRow label="" summary={kind.id === "dxo-pureraw"
+            <PrefRow label="" summary={kind.handoff === "files"
               ? t("plugins.pureraw")
-              : t("plugins.bracket")}
+              : kind.handoff === "macrostudio" ? t("plugins.bracket") : t("plugins.layers")}
               hint={t(`plugins.kind.${kind.id}.note`)}>
               <button className="btn small danger" onClick={() => onPlugins(plugins.filter((q) => q.id !== p.id))}>
                 {t("plugins.remove")}</button>

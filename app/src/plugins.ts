@@ -10,6 +10,7 @@ import { commands, type PluginConfig as StoredPlugin, type PluginReturn } from "
 import type { Values } from "./manifest";
 import { fileKind, type ImageEntry } from "./library";
 import { settings } from "./settings";
+import { IS_MAC } from "./keys";
 
 export type PluginKind = {
   id: string;
@@ -23,26 +24,23 @@ export type PluginKind = {
   sendDefault: "original" | "tiff";
   // originals it takes only as raws, though a TIFF can be of any photo
   rawOriginals?: boolean;
-  // how the photos go: "files" starts the application with them and looks
-  // for what it writes (plugins.rs, plugin_watch); "macrostudio" hands it a
-  // job and reads its receipt (plugin_job)
-  handoff?: "files" | "macrostudio";
   // what comes back from raws is a demosaiced raw, a linear DNG, and starts
   // with a raw's new-photo defaults, as a panorama does
   linearDng?: boolean;
   // where the application is installed, as patterns with * under
   // /Applications or Program Files (plugins.rs, plugin_find_apps)
   appHints: { mac: string[]; win: string[] };
-  // what it writes: "prefix" is one file per photo named from it, "any" one
-  // file for the lot; looked for beside each photo, in these subfolders
-  returns: { exts: string[]; match: "prefix" | "any"; subfolders: string[] };
   // settings a returned file starts with, the first time it is opened
   onReturn: { id: string; label: string; hint: string; values: Values; default: boolean }[];
   // what Preferences says about using it
   note: string;
-};
+} & (
+  | { handoff: "files"; returns: { exts: string[]; match: "prefix" | "any"; subfolders: string[] } }
+  | { handoff: "macrostudio" }
+  | { handoff: "photocraft" }
+);
 
-export const KINDS: PluginKind[] = [
+const kinds: PluginKind[] = [
   {
     id: "dxo-pureraw",
     label: "DxO PureRAW",
@@ -50,6 +48,7 @@ export const KINDS: PluginKind[] = [
     minPhotos: 1,
     send: "original",
     sendDefault: "original",
+    handoff: "files",
     appHints: { mac: ["DxO PureRAW*.app"], win: ["DxO/DxO PureRAW*/*PureRaw*.exe"] },
     // PureRAW names its DNG after the raw with a suffix of the user's
     // choosing, in a "DxO" folder beside it unless told otherwise
@@ -75,13 +74,24 @@ export const KINDS: PluginKind[] = [
     handoff: "macrostudio",
     linearDng: true,
     appHints: { mac: ["Macro Studio.app"], win: ["Macro Studio/MacroStudio.exe"] },
-    // the stack is saved beside the first photo, as <its name>-stacked; the
-    // receipt says where, so these are only what the filmstrip shows
-    returns: { exts: ["dng", "tif"], match: "any", subfolders: [""] },
     onReturn: [],
     note: "select a focus bracket. Each stack opens in Macro Studio to check and retouch, and comes back here when it is saved there, as a DNG for the most latitude",
   },
+  {
+    id: "photocraft",
+    label: "PhotoCraft",
+    accepts: "any",
+    minPhotos: 1,
+    send: "tiff",
+    sendDefault: "tiff",
+    handoff: "photocraft",
+    appHints: { mac: ["PhotoCraft.app"], win: [] },
+    onReturn: [],
+    note: "Each selected photo opens as a 16-bit ProPhoto RGB layer in a TIFF or PSB beside the first photo.",
+  },
 ];
+
+export const KINDS = kinds.filter((kind) => kind.handoff !== "photocraft" || IS_MAC);
 
 export const kindOf = (id: string) => KINDS.find((k) => k.id === id);
 

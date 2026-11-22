@@ -1896,6 +1896,7 @@ body.dragging-photos, body.dragging-photos * { cursor: grabbing !important; user
 .context-menu .has-sub > button::after { content: "›"; float: right; color: var(--text-3); }
 .context-menu .submenu { display: none; position: absolute; top: -5px; left: 100%; }
 .context-menu .has-sub:hover > .submenu { display: block; }
+.context-menu:not(:has(> .has-sub:hover)) > .has-sub.open > .submenu { display: block; }
 .context-menu.flip .submenu { left: auto; right: 100%; }
 
 /* the Folders card's refresh and the History card's start over, compress and eye, by their chevrons */

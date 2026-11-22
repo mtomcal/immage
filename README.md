@@ -54,6 +54,9 @@ and Linux. **All builds are alpha; bugs are expected.**
   to 400 × 400 pixels for unedited originals, optional NAS Smart Search, and NAS progress in
   Preferences → Immage Accelerator (Experimental).
 - Export to a folder or an Immich album, with borders and file-name templates.
+- On macOS, use [Edit In](app/docs/edit-in.md#open-photos-as-layers-in-photocraft)
+  to open edited photos as full-size 16-bit ProPhoto RGB layers in PhotoCraft.
+  Continue editing the composite of a layered TIFF in Immage.
 - Print a photo, or a contact sheet of many with their file names, or save a
   PDF, with your printer's ICC profile, and [soft proof](app/docs/print.md) the
   photo on screen first.

@@ -17,6 +17,9 @@ use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
+use crate::typed_export::{ExportItem, ExportOptions};
+use crate::AppState;
+
 pub struct Plugins {
     returns_path: PathBuf,
     // the plugins the user set up (plugins.json). only Rust writes it, and
@@ -392,6 +395,142 @@ pub async fn plugin_launch(state: State<'_, Plugins>, id: String, files: Vec<Str
     .await
     .map_err(|e| e.to_string())?
     .map_err(|e| format!("could not start {name}: {e}"))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn plugin_photo_craft(
+    app: AppHandle, state: State<'_, AppState>, plugins: State<'_, Plugins>,
+    id: String, job: u64, imgids: Vec<i64>,
+) -> Result<String, String> {
+    if !cfg!(target_os = "macos") {
+        return Err("PhotoCraft Edit In requires macOS".into());
+    }
+    let plugin = plugins.ready(&id)?;
+    if plugin.kind != "photocraft" {
+        return Err("Choose PhotoCraft in Preferences".into());
+    }
+    let bundle = PathBuf::from(plugin.app);
+    let cli = bundle.join("Contents/MacOS/photocraft-cli");
+    if !cli.is_file() {
+        return Err("Choose a PhotoCraft application with photocraft-cli in Preferences".into());
+    }
+
+    let photos = imgids.into_iter().map(|id| {
+        state.tagged.known_photo(id).map(|photo| (id, photo))
+            .ok_or_else(|| format!("Unknown photo {id}"))
+    }).collect::<Result<Vec<_>, _>>()?;
+    let (_, first) = photos.first().ok_or("Select at least one photo")?;
+    let source = Path::new(&first.path);
+    let folder = source.parent().ok_or("The first photo has no folder")?.to_path_buf();
+    let name = source.file_stem().ok_or("The first photo has no filename")?.to_string_lossy().into_owned();
+    let items = photos.iter().map(|(imgid, photo)| {
+        let file = Path::new(&photo.path).file_name().ok_or("A selected photo has no filename")?;
+        let mut stem = file.to_string_lossy().into_owned();
+        if photo.version > 0 {
+            stem = format!("{stem} ({})", photo.version);
+        }
+        Ok(ExportItem { imgid: *imgid, stem, ..Default::default() })
+    }).collect::<Result<Vec<_>, String>>()?;
+    let count = items.len();
+    let staging = tauri::async_runtime::spawn_blocking({
+        let folder = folder.clone();
+        move || tempfile::Builder::new().prefix(".immage-photocraft-").tempdir_in(folder)
+    }).await.map_err(|e| e.to_string())?.map_err(|e| format!("Cannot write beside the first photo: {e}"))?;
+    let rendered = crate::export_cmds::export_images(app, state, job, items, ExportOptions {
+        dir: staging.path().to_string_lossy().into_owned(),
+        format: "tiff".into(),
+        bpp: Some(16),
+        color_space: "prophoto".into(),
+        conflict: "unique".into(),
+        ..Default::default()
+    }).await?;
+    if let Some(failure) = rendered.failed.first() {
+        return Err(failure.error.clone());
+    }
+    if rendered.written.len() != count {
+        return Err("Could not render every selected photo".into());
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let dimensions = rendered.written.iter().map(|path| -> Result<_, image::ImageError> {
+            image::ImageReader::open(path)?.into_dimensions()
+        }).collect::<Result<Vec<_>, _>>();
+        let prefer_tiff = dimensions.is_ok_and(photocraft_tiff_fits);
+        let stack = build_photocraft_stack(&cli, staging.path(), &rendered.written, prefer_tiff)?;
+        let document = publish_photocraft_stack(&stack, &folder, &name)
+            .map_err(|e| format!("Could not save the PhotoCraft document: {e}"))?;
+        let opened = std::process::Command::new("open").arg("-a").arg(bundle).arg(&document).output();
+        match opened {
+            Ok(out) if out.status.success() => Ok(document.to_string_lossy().into_owned()),
+            Ok(out) => Err(format!("Saved {}, but PhotoCraft did not open it: {}",
+                                   document.display(), String::from_utf8_lossy(&out.stderr).trim())),
+            Err(e) => Err(format!("Saved {}, but PhotoCraft did not open it: {e}", document.display())),
+        }
+    }).await.map_err(|e| e.to_string())?
+}
+
+fn photocraft_tiff_fits(dimensions: Vec<(u32, u32)>) -> bool {
+    let (mut width, mut height, mut layer_pixels) = (0, 0, 0u128);
+    for (w, h) in dimensions {
+        width = width.max(w);
+        height = height.max(h);
+        layer_pixels += u128::from(w) * u128::from(h);
+    }
+    // Budget four 16-bit channels per layer and for the merged canvas.
+    // Keep space below classic TIFF's 4 GiB limit for layer data and metadata.
+    let canvas_pixels = u128::from(width) * u128::from(height);
+    (layer_pixels + canvas_pixels) * 8 < 2 * (1 << 30)
+}
+
+fn build_photocraft_stack(cli: &Path, staging: &Path, photos: &[String], prefer_tiff: bool) -> Result<PathBuf, String> {
+    let params = json!({ "paths": photos }).to_string();
+    let build = |extension, flags: &[&str]| {
+        let stack = staging.join(format!("stack.{extension}"));
+        let result = std::process::Command::new(cli)
+            .args(["run", "--new", r#"{"width":1,"height":1}"#,
+                   "--cmd", "file.scripts.loadFilesIntoStack", "--params"])
+            .arg(&params)
+            .arg("--out").arg(&stack)
+            .args(flags)
+            .output().map_err(|e| format!("Could not run PhotoCraft: {e}"))?;
+        if result.status.success() && stack.is_file() {
+            Ok(stack)
+        } else {
+            Err(format!("PhotoCraft could not build the {extension} stack ({}): {}",
+                        result.status, String::from_utf8_lossy(&result.stderr).trim()))
+        }
+    };
+
+    if prefer_tiff {
+        return match build("tif", &["--tiff-layers", "--tiff-compression", "zip"]) {
+            Ok(stack) => Ok(stack),
+            Err(tiff_error) => build("psb", &[]).map_err(|psb_error| format!("{tiff_error}\n{psb_error}")),
+        };
+    }
+    build("psb", &[])
+}
+
+fn publish_photocraft_stack(stack: &Path, folder: &Path, name: &str) -> std::io::Result<PathBuf> {
+    let extension = stack.extension().unwrap_or_default().to_string_lossy();
+    for n in 0u64.. {
+        let filename = if n == 0 { format!("{name}-Edit.{extension}") } else { format!("{name}-Edit-{n}.{extension}") };
+        if extension == "tif" && folder.join(format!("{filename}.xmp")).exists() {
+            continue;
+        }
+        let target = folder.join(filename);
+        match std::fs::File::create_new(&target) {
+            Ok(file) => drop(file),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+        if let Err(e) = std::fs::rename(stack, &target) {
+            let _ = std::fs::remove_file(&target);
+            return Err(e);
+        }
+        return Ok(target);
+    }
+    unreachable!()
 }
 
 #[derive(Deserialize, specta::Type)]
@@ -890,6 +1029,13 @@ pub fn plugin_job(app: AppHandle, state: State<'_, Plugins>, job: Job) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn photocraft_budgets_layers_and_the_full_composite_for_tiff() {
+        assert!(photocraft_tiff_fits(vec![(7980, 5320); 5]));
+        assert!(!photocraft_tiff_fits(vec![(7980, 5320); 6]));
+        assert!(!photocraft_tiff_fits(vec![(20_000, 4_000), (4_000, 20_000)]));
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target").join(format!("{name}-{}", std::process::id()));

@@ -4055,6 +4055,19 @@ export default function App() {
     const originals = photos.map(([path]) => path);
     let send = originals;
     try {
+      if (kind.handoff === "photocraft") {
+        setStatus(t("app.status.pluginPreparingLayers", { name: cfg.name }));
+        const s = session.current;
+        if (s && targets.some((photo) => photo.imgid === s.imgid)) {
+          s.flushEdits();
+          await s.settled();
+        }
+        const path = await track(commands.pluginPhotoCraft(cfg.id, Date.now(), targets.map((photo) => photo.imgid)));
+        if (path.endsWith(".tif") && folderRef.current && !immichRef.current && parentDir(path) === folderRef.current)
+          void showFolder(folderRef.current, true);
+        setStatus(t("app.status.pluginSentItems", { items: baseName(path), name: cfg.name }));
+        return;
+      }
       // TIFFs with the edit, beside each photo as Lightroom's "-Edit" files;
       // a result named from one is still named from its photo
       if (kind.send === "tiff" || (kind.send === "choice" && cfg.send === "tiff")) {

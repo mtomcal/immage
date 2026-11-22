@@ -1,10 +1,9 @@
 # Edit In
 
-**Edit In** sends photos to another application for something Immage
-doesn't do itself, and brings back the file it saves, ready to edit. It
-works with **DxO PureRAW**, for its noise reduction and lens sharpening on
-raws, and **Macro Studio**, for focus stacking
-([below](#macro-studio-focus-stacking)).
+**Edit In** sends photos to another application. Use **DxO PureRAW** for
+noise reduction and lens sharpening on raw photos, **Macro Studio** for
+[focus stacking](#macro-studio-focus-stacking), or **PhotoCraft** for
+[layered editing](#open-photos-as-layers-in-photocraft).
 
 **If you've used another editor:** this is the usual Edit In command and
 PureRAW's own plugin in one. The returned file appears beside its original,
@@ -54,7 +53,7 @@ waiting**, or after three hours.
 
 | Reason shown | Why |
 | --- | --- |
-| **choose its application in Preferences** | PureRAW wasn't found; set **Application**. |
+| **choose its application in Preferences** | Immage couldn't find the editor. Set **Application**. |
 | **raw files only** | PureRAW only takes raws, and so does Macro Studio set to send **Raws**. |
 | **select at least 2 photos** | Macro Studio stacks two or more. |
 | **only photos on this computer** | An Immich result that hasn't been opened or downloaded yet. |
@@ -107,3 +106,29 @@ waiting**, or if Macro Studio doesn't start or stops responding.
 The first returned result opens automatically when **Open generated photos**
 is enabled in Preferences › General › Workspace. Turn it off to keep editing
 the current photo and open the result from its completion notification.
+
+## Open photos as layers in PhotoCraft
+
+On macOS, install a version of PhotoCraft that includes the `photocraft-cli`
+tool and supports **Load Files into Stack**.
+[PhotoCraft downloads](https://github.com/storytold/photocraft/releases)
+
+1. In **Preferences › Plugins**, click **Add Plugin ▾** and choose
+   **PhotoCraft**.
+2. If Immage doesn't find PhotoCraft in Applications, click **Choose…**
+   beside **Application** and select **PhotoCraft.app**.
+3. Select one or more photos in the filmstrip or Library grid.
+4. Right-click the selection and choose **Edit In › PhotoCraft**.
+
+Immage renders each selected photo with its current edits at full resolution
+in 16-bit linear ProPhoto RGB. Each photo or virtual copy gets its own editable
+pixel layer in one PhotoCraft document.
+
+Immage saves a ZIP-compressed layered TIFF beside the first photo when the
+estimated uncompressed layers and composite fit under 2 GiB. Larger stacks use
+PSB. If PhotoCraft cannot write the layered TIFF, Immage tries PSB.
+
+Use **Save** in PhotoCraft to update the document. Immage shows the TIFF beside
+the source photos and edits its composite through an XMP sidecar. Use PhotoCraft
+to edit individual layers. If you are working on a PSB, save a flattened
+16-bit TIFF copy beside the photos to continue editing the composite in Immage.
